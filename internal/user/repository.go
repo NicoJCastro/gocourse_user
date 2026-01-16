@@ -1,6 +1,7 @@
 package user
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/NicoJCastro/gocourse_domain/domain"
@@ -12,12 +13,12 @@ import (
 )
 
 type Repository interface {
-	Create(user *domain.User) error
-	GetAll(filters Filters, offset, limit int) ([]domain.User, error)
-	Get(id string) (*domain.User, error)
-	Delete(id string) error
-	Update(id string, firstName *string, lastName *string, email *string, phone *string) error
-	Count(filters Filters) (int64, error)
+	Create(ctx context.Context, user *domain.User) error
+	GetAll(ctx context.Context, filters Filters, offset, limit int) ([]domain.User, error)
+	Get(ctx context.Context, id string) (*domain.User, error)
+	Delete(ctx context.Context, id string) error
+	Update(ctx context.Context, id string, firstName *string, lastName *string, email *string, phone *string) error
+	Count(ctx context.Context, filters Filters) (int64, error)
 }
 
 type repository struct {
@@ -29,9 +30,9 @@ func NewRepository(log *log.Logger, db *gorm.DB) Repository {
 	return &repository{log: log, db: db}
 }
 
-func (r *repository) Create(user *domain.User) error {
+func (r *repository) Create(ctx context.Context, user *domain.User) error {
 	r.log.Println("---- Creating user in DB ----")
-	result := r.db.Create(user)
+	result := r.db.WithContext(ctx).Create(user)
 	if result.Error != nil {
 		r.log.Println("Error creating user: ", result.Error)
 		return result.Error
@@ -40,9 +41,9 @@ func (r *repository) Create(user *domain.User) error {
 	return nil
 }
 
-func (r *repository) GetAll(filters Filters, offset, limit int) ([]domain.User, error) {
+func (r *repository) GetAll(ctx context.Context, filters Filters, offset, limit int) ([]domain.User, error) {
 	var users []domain.User
-	tx := r.db.Model(&users)
+	tx := r.db.WithContext(ctx).Model(&users)
 	tx = applyFilters(tx, filters)
 	tx = tx.Limit(limit).Offset(offset)
 	result := tx.Order("created_at desc").Find(&users)
@@ -55,9 +56,9 @@ func (r *repository) GetAll(filters Filters, offset, limit int) ([]domain.User, 
 
 }
 
-func (r *repository) Get(id string) (*domain.User, error) {
+func (r *repository) Get(ctx context.Context, id string) (*domain.User, error) {
 	user := domain.User{ID: id}
-	result := r.db.First(&user)
+	result := r.db.WithContext(ctx).First(&user)
 	if result.Error != nil {
 		r.log.Println("Error getting user: ", result.Error)
 		return nil, result.Error
@@ -65,9 +66,9 @@ func (r *repository) Get(id string) (*domain.User, error) {
 	return &user, nil
 }
 
-func (r *repository) Delete(id string) error {
+func (r *repository) Delete(ctx context.Context, id string) error {
 	user := domain.User{ID: id}
-	result := r.db.Delete(&user)
+	result := r.db.WithContext(ctx).Delete(&user)
 	if result.Error != nil {
 		r.log.Println("Error deleting user: ", result.Error)
 		return result.Error
@@ -75,7 +76,7 @@ func (r *repository) Delete(id string) error {
 	return nil
 }
 
-func (r *repository) Update(id string, firstName *string, lastName *string, email *string, phone *string) error {
+func (r *repository) Update(ctx context.Context, id string, firstName *string, lastName *string, email *string, phone *string) error {
 
 	updates := make(map[string]interface{})
 	if firstName != nil {
@@ -90,12 +91,24 @@ func (r *repository) Update(id string, firstName *string, lastName *string, emai
 	if phone != nil {
 		updates["phone"] = *phone
 	}
-	result := r.db.Model(&domain.User{}).Where("id = ?", id).Updates(updates)
+	result := r.db.WithContext(ctx).Model(&domain.User{}).Where("id = ?", id).Updates(updates)
 	if result.Error != nil {
 		r.log.Println("Error updating user: ", result.Error)
 		return result.Error
 	}
 	return nil
+}
+
+func (r *repository) Count(ctx context.Context, filters Filters) (int64, error) {
+	var count int64
+	tx := r.db.WithContext(ctx).Model(&domain.User{})
+	tx = applyFilters(tx, filters)
+	result := tx.Count(&count)
+	if result.Error != nil {
+		r.log.Println("Error counting users: ", result.Error)
+		return 0, result.Error
+	}
+	return count, nil
 }
 
 func applyFilters(tx *gorm.DB, filters Filters) *gorm.DB {
@@ -121,16 +134,4 @@ func applyFilters(tx *gorm.DB, filters Filters) *gorm.DB {
 	}
 
 	return tx
-}
-
-func (r *repository) Count(filters Filters) (int64, error) {
-	var count int64
-	tx := r.db.Model(&domain.User{})
-	tx = applyFilters(tx, filters)
-	result := tx.Count(&count)
-	if result.Error != nil {
-		r.log.Println("Error counting users: ", result.Error)
-		return 0, result.Error
-	}
-	return count, nil
 }

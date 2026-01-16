@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"log"
 	"net/http"
 	"os"
@@ -8,17 +9,14 @@ import (
 
 	"github.com/NicoJCastro/gocourse_user/internal/user"
 	"github.com/NicoJCastro/gocourse_user/pkg/bootstrap"
+	"github.com/NicoJCastro/gocourse_user/pkg/handler"
 
-	"github.com/gorilla/mux"
 	"github.com/joho/godotenv"
 )
 
 func main() {
 
-	//router
-	router := mux.NewRouter()
-
-	_ = godotenv.Load("../.env")
+	_ = godotenv.Load(".env")
 	//logger
 	logger := bootstrap.InitLogger()
 
@@ -33,29 +31,48 @@ func main() {
 		logger.Fatal("PAGINATION_LIMIT_DEFAUL is not set")
 	}
 
-	//Antes de usar el servicio, se debe crear el repositorio
+	ctx := context.Background()
+
 	userRepo := user.NewRepository(logger, db)
 	userService := user.NewService(logger, userRepo)
 	userEndpoints := user.MakeEndpoints(userService, user.Config{LimPageDef: pagLimitDef})
 
-	//user endpoints
-
-	router.HandleFunc("/users", userEndpoints.Create).Methods("POST")
-	router.HandleFunc("/users/{id}", userEndpoints.Get).Methods("GET")
-	router.HandleFunc("/users", userEndpoints.GetAll).Methods("GET")
-	router.HandleFunc("/users/{id}", userEndpoints.Update).Methods("PATCH")
-	router.HandleFunc("/users/{id}", userEndpoints.Delete).Methods("DELETE")
+	h := handler.NewUserHTTPServer(ctx, userEndpoints)
 
 	port := os.Getenv("PORT")
 	adress := "localhost:" + port
 
 	srv := &http.Server{
-		Handler:      router,
+		Handler:      accessControl(h),
 		Addr:         adress,
 		WriteTimeout: 5 * time.Second,
 		ReadTimeout:  5 * time.Second,
 	}
 
-	log.Fatal(srv.ListenAndServe())
+	errCh := make(chan error)
+	go func() {
+		logger.Println("listen in ", adress)
+		errCh <- srv.ListenAndServe()
+	}()
 
+	err = <-errCh
+	if err != nil {
+		logger.Println("error: ", err)
+		os.Exit(1)
+	}
+
+}
+
+func accessControl(h http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PATCH, PUT, DELETE, OPTIONS, HEAD")
+		w.Header().Set("Access-Control-Allow-Headers", "Origin, Content-Type, Accept, Authorization, Cache-Control, X-Requested-With")
+
+		if r.Method == "OPTIONS" {
+			return
+		}
+
+		h.ServeHTTP(w, r)
+	})
 }
