@@ -18,7 +18,7 @@ func main() {
 	//router
 	router := mux.NewRouter()
 
-	_ = godotenv.Load()
+	_ = godotenv.Load("../.env")
 	//logger
 	logger := bootstrap.InitLogger()
 
@@ -46,9 +46,12 @@ func main() {
 	router.HandleFunc("/users/{id}", userEndpoints.Update).Methods("PATCH")
 	router.HandleFunc("/users/{id}", userEndpoints.Delete).Methods("DELETE")
 
+	port := os.Getenv("PORT")
+	adress := "localhost:" + port
+
 	srv := &http.Server{
 		Handler:      router,
-		Addr:         "localhost:8081",
+		Addr:         adress,
 		WriteTimeout: 5 * time.Second,
 		ReadTimeout:  5 * time.Second,
 	}
