@@ -3,6 +3,7 @@ module github.com/NicoJCastro/gocourse_user
 go 1.25.1
 
 require (
+	github.com/NicoJCastro/go_lib_response v0.0.1
 	github.com/NicoJCastro/gocourse_domain v0.0.2-0.20260112205214-a2fdea737ea7
 	github.com/NicoJCastro/gocourse_meta v0.0.2
 	github.com/go-kit/kit v0.13.0

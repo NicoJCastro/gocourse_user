@@ -17,7 +17,7 @@ type Repository interface {
 	GetAll(ctx context.Context, filters Filters, offset, limit int) ([]domain.User, error)
 	Get(ctx context.Context, id string) (*domain.User, error)
 	Delete(ctx context.Context, id string) error
-	Update(ctx context.Context, id string, firstName *string, lastName *string, email *string, phone *string) error
+	Update(ctx context.Context, id string, firstName *string, lastName *string, email *string, phone *string) (*domain.User, error)
 	Count(ctx context.Context, filters Filters) (int64, error)
 }
 
@@ -76,8 +76,8 @@ func (r *repository) Delete(ctx context.Context, id string) error {
 	return nil
 }
 
-func (r *repository) Update(ctx context.Context, id string, firstName *string, lastName *string, email *string, phone *string) error {
-
+func (r *repository) Update(ctx context.Context, id string, firstName *string, lastName *string, email *string, phone *string) (*domain.User, error) {
+	// 🎯 Construimos el mapa de updates solo con los campos proporcionados
 	updates := make(map[string]interface{})
 	if firstName != nil {
 		updates["first_name"] = *firstName
@@ -91,12 +91,23 @@ func (r *repository) Update(ctx context.Context, id string, firstName *string, l
 	if phone != nil {
 		updates["phone"] = *phone
 	}
+
+	// 🔧 Ejecutamos la actualización en la base de datos
 	result := r.db.WithContext(ctx).Model(&domain.User{}).Where("id = ?", id).Updates(updates)
 	if result.Error != nil {
 		r.log.Println("Error updating user: ", result.Error)
-		return result.Error
+		return nil, result.Error
 	}
-	return nil
+
+	// ✅ Obtenemos el usuario actualizado después de la operación
+	// 💡 Esto asegura que retornamos los datos más recientes (incluyendo timestamps)
+	user, err := r.Get(ctx, id)
+	if err != nil {
+		r.log.Println("Error getting updated user: ", err)
+		return nil, err
+	}
+
+	return user, nil
 }
 
 func (r *repository) Count(ctx context.Context, filters Filters) (int64, error) {

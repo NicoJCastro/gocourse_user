@@ -9,7 +9,9 @@ import (
 	"github.com/go-kit/kit/endpoint"
 	httptransport "github.com/go-kit/kit/transport/http"
 
+	"github.com/NicoJCastro/go_lib_response/response"
 	"github.com/NicoJCastro/gocourse_user/internal/user"
+
 	"github.com/gorilla/mux"
 )
 
@@ -67,7 +69,7 @@ func decodeGetUser(_ context.Context, r *http.Request) (interface{}, error) {
 	vars := mux.Vars(r)
 	id, ok := vars["id"]
 	if !ok || id == "" {
-		return nil, &httpError{Message: "id is required", Status: http.StatusBadRequest}
+		return nil, response.BadRequest("id is required")
 	}
 	return user.GetRequest{ID: id}, nil
 }
@@ -110,7 +112,7 @@ func decodeUpdateUser(_ context.Context, r *http.Request) (interface{}, error) {
 	vars := mux.Vars(r)
 	id, ok := vars["id"]
 	if !ok || id == "" {
-		return nil, &httpError{Message: "id is required", Status: http.StatusBadRequest}
+		return nil, response.BadRequest("id is required")
 	}
 
 	var req user.UpdateRequest
@@ -128,35 +130,22 @@ func decodeDeleteUser(_ context.Context, r *http.Request) (interface{}, error) {
 	vars := mux.Vars(r)
 	id, ok := vars["id"]
 	if !ok || id == "" {
-		return nil, &httpError{Message: "id is required", Status: http.StatusBadRequest}
+		return nil, response.BadRequest("id is required")
 	}
 	return user.DeleteRequest{ID: id}, nil
 }
 
 // 🎯 Encoder para todas las respuestas
-func encodeResponse(ctx context.Context, w http.ResponseWriter, response interface{}) error {
-	w.Header().Set("Content-Type", "application/json; charset=utf-8")
-
-	// 💡 Manejar errores de HTTP
-	if err, ok := response.(error); ok {
-		if httpErr, ok := err.(*httpError); ok {
-			w.WriteHeader(httpErr.Status)
-			return json.NewEncoder(w).Encode(map[string]string{"error": httpErr.Message})
-		}
-		w.WriteHeader(http.StatusInternalServerError)
-		return json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+func encodeResponse(ctx context.Context, w http.ResponseWriter, resp interface{}) error {
+	respObj, ok := resp.(response.Response)
+	if !ok {
+		errorResp := response.InternalServerError("invalid response type")
+		w.Header().Set("Content-Type", "application/json; charset=utf-8")
+		w.WriteHeader(errorResp.StatusCode())
+		return json.NewEncoder(w).Encode(errorResp)
 	}
 
-	w.WriteHeader(http.StatusOK)
-	return json.NewEncoder(w).Encode(response)
-}
-
-// 🎯 Tipo auxiliar para errores HTTP
-type httpError struct {
-	Message string
-	Status  int
-}
-
-func (e *httpError) Error() string {
-	return e.Message
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.WriteHeader(respObj.StatusCode())
+	return json.NewEncoder(w).Encode(respObj)
 }

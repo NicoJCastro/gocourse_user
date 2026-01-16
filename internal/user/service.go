@@ -21,7 +21,7 @@ type (
 		Get(ctx context.Context, id string) (*domain.User, error)
 		GetAll(ctx context.Context, filters Filters, offset, limit int) ([]domain.User, error)
 		Delete(ctx context.Context, id string) error
-		Update(ctx context.Context, id string, firstName *string, lastName *string, email *string, phone *string) error
+		Update(ctx context.Context, id string, firstName *string, lastName *string, email *string, phone *string) (*domain.User, error)
 		Count(ctx context.Context, filters Filters) (int64, error)
 	}
 	// minúscula porque es privado
@@ -91,9 +91,16 @@ func (s service) Delete(ctx context.Context, id string) error {
 	return s.repo.Delete(ctx, id)
 }
 
-func (s service) Update(ctx context.Context, id string, firstName *string, lastName *string, email *string, phone *string) error {
+func (s service) Update(ctx context.Context, id string, firstName *string, lastName *string, email *string, phone *string) (*domain.User, error) {
 	s.log.Println("---- Updating user ----")
-	return s.repo.Update(ctx, id, firstName, lastName, email, phone)
+	// ✅ Retornamos el usuario actualizado del repositorio
+	user, err := s.repo.Update(ctx, id, firstName, lastName, email, phone)
+	if err != nil {
+		s.log.Printf("Error updating user: %v\n", err)
+		return nil, err
+	}
+	s.log.Printf("User updated successfully: %s\n", id)
+	return user, nil
 }
 
 func (s service) Count(ctx context.Context, filters Filters) (int64, error) {
