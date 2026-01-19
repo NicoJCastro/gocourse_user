@@ -2,6 +2,7 @@ package user
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/NicoJCastro/gocourse_domain/domain"
@@ -35,7 +36,7 @@ func (r *repository) Create(ctx context.Context, user *domain.User) error {
 	result := r.db.WithContext(ctx).Create(user)
 	if result.Error != nil {
 		r.log.Println("Error creating user: ", result.Error)
-		return result.Error
+		return ErrUserNotCreated
 	}
 	r.log.Println("User created with ID: ", user.ID)
 	return nil
@@ -49,7 +50,7 @@ func (r *repository) GetAll(ctx context.Context, filters Filters, offset, limit 
 	result := tx.Order("created_at desc").Find(&users)
 	if result.Error != nil {
 		r.log.Println("Error getting users: ", result.Error)
-		return nil, result.Error
+		return nil, ErrUserNotRetrieved
 	}
 
 	return users, nil
@@ -61,7 +62,11 @@ func (r *repository) Get(ctx context.Context, id string) (*domain.User, error) {
 	result := r.db.WithContext(ctx).First(&user)
 	if result.Error != nil {
 		r.log.Println("Error getting user: ", result.Error)
-		return nil, result.Error
+		// 🔍 Verificamos si es un error de GORM "record not found"
+		if errors.Is(result.Error, gorm.ErrRecordNotFound) {
+			return nil, NewErrNotFound(id)
+		}
+		return nil, ErrUserNotRetrieved
 	}
 	return &user, nil
 }
@@ -71,13 +76,21 @@ func (r *repository) Delete(ctx context.Context, id string) error {
 	result := r.db.WithContext(ctx).Delete(&user)
 	if result.Error != nil {
 		r.log.Println("Error deleting user: ", result.Error)
-		return result.Error
+		// 🔍 Verificamos si es un error de GORM "record not found"
+		if errors.Is(result.Error, gorm.ErrRecordNotFound) {
+			return NewErrNotFound(id)
+		}
+		return ErrUserNotDeleted
+	}
+	if result.RowsAffected == 0 {
+		r.log.Printf("No user found with ID: %s", id)
+		return NewErrNotFound(id)
 	}
 	return nil
 }
 
 func (r *repository) Update(ctx context.Context, id string, firstName *string, lastName *string, email *string, phone *string) (*domain.User, error) {
-	// 🎯 Construimos el mapa de updates solo con los campos proporcionados
+	// Construimos el mapa de updates solo con los campos proporcionados
 	updates := make(map[string]interface{})
 	if firstName != nil {
 		updates["first_name"] = *firstName
@@ -92,19 +105,24 @@ func (r *repository) Update(ctx context.Context, id string, firstName *string, l
 		updates["phone"] = *phone
 	}
 
-	// 🔧 Ejecutamos la actualización en la base de datos
+	// Ejecutamos la actualización en la base de datos
 	result := r.db.WithContext(ctx).Model(&domain.User{}).Where("id = ?", id).Updates(updates)
 	if result.Error != nil {
 		r.log.Println("Error updating user: ", result.Error)
-		return nil, result.Error
+		return nil, ErrUserNotUpdated
 	}
 
-	// ✅ Obtenemos el usuario actualizado después de la operación
-	// 💡 Esto asegura que retornamos los datos más recientes (incluyendo timestamps)
+	if result.RowsAffected == 0 {
+		r.log.Printf("No user found with ID: %s", id)
+		return nil, NewErrNotFound(id)
+	}
+
+	// Obtenemos el usuario actualizado después de la operación
+	// Esto asegura que retornamos los datos más recientes (incluyendo timestamps)
 	user, err := r.Get(ctx, id)
 	if err != nil {
 		r.log.Println("Error getting updated user: ", err)
-		return nil, err
+		return nil, ErrUserNotRetrieved
 	}
 
 	return user, nil
@@ -117,7 +135,7 @@ func (r *repository) Count(ctx context.Context, filters Filters) (int64, error) 
 	result := tx.Count(&count)
 	if result.Error != nil {
 		r.log.Println("Error counting users: ", result.Error)
-		return 0, result.Error
+		return 0, ErrUserNotCounted
 	}
 	return count, nil
 }

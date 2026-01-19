@@ -78,7 +78,7 @@ func decodeGetUser(_ context.Context, r *http.Request) (interface{}, error) {
 	vars := mux.Vars(r)
 	id, ok := vars["id"]
 	if !ok || id == "" {
-		return nil, response.BadRequest("id is required")
+		return nil, user.ErrIDRequired
 	}
 	return user.GetRequest{ID: id}, nil
 }
@@ -121,12 +121,12 @@ func decodeUpdateUser(_ context.Context, r *http.Request) (interface{}, error) {
 	vars := mux.Vars(r)
 	id, ok := vars["id"]
 	if !ok || id == "" {
-		return nil, response.BadRequest("id is required")
+		return nil, user.ErrIDRequired
 	}
 
 	var req user.UpdateRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		return nil, err
+		return nil, user.ErrInvalidRequestType
 	}
 
 	// Asignar el ID extraído de la URL
@@ -139,7 +139,7 @@ func decodeDeleteUser(_ context.Context, r *http.Request) (interface{}, error) {
 	vars := mux.Vars(r)
 	id, ok := vars["id"]
 	if !ok || id == "" {
-		return nil, response.BadRequest("id is required")
+		return nil, user.ErrIDRequired
 	}
 	return user.DeleteRequest{ID: id}, nil
 }
@@ -155,7 +155,15 @@ func encodeResponse(ctx context.Context, w http.ResponseWriter, resp interface{}
 
 func encodeError(_ context.Context, err error, w http.ResponseWriter) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
-	resp := err.(response.Response)
+
+	// 🔍 Intentamos convertir el error a response.Response
+	resp, ok := err.(response.Response)
+	if !ok {
+		// ❌ Si no es response.Response, es un error estándar de Go
+		// 💡 Lo convertimos a InternalServerError como fallback seguro
+		resp = response.InternalServerError(err.Error())
+	}
+
 	w.WriteHeader(resp.StatusCode())
 	_ = json.NewEncoder(w).Encode(resp)
 }

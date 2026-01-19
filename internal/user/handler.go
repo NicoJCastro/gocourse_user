@@ -2,6 +2,7 @@ package user
 
 import (
 	"context"
+	"errors"
 	"strconv"
 
 	"github.com/NicoJCastro/go_lib_response/response"
@@ -87,7 +88,8 @@ func makeCreateEndpoint(s Service) Controller {
 
 		user, err := s.Create(ctx, req.FirstName, req.LastName, req.Email, req.Phone)
 		if err != nil {
-			return nil, response.InternalServerError(err.Error())
+			// 💥 Para errores de creación (BD, validación, etc.)
+			return nil, response.InternalServerError("error creating user: " + err.Error())
 		}
 
 		return response.Created("User created successfully", user, nil), nil
@@ -103,7 +105,13 @@ func makeGetEndpoint(s Service) Controller {
 
 		user, err := s.Get(ctx, req.ID)
 		if err != nil {
-			return nil, response.NotFound(err.Error())
+			// 🔍 Verificamos si es un error de "no encontrado"
+			var notFoundErr *ErrNotFound
+			if errors.As(err, &notFoundErr) || errors.Is(err, ErrNotFoundBase) {
+				return nil, response.NotFound(err.Error())
+			}
+			// 💥 Para otros errores (BD, conexión, etc.)
+			return nil, response.InternalServerError("error retrieving user: " + err.Error())
 		}
 
 		return response.OK("User retrieved successfully", user, nil), nil
@@ -134,7 +142,7 @@ func makeGetAllEndpoint(s Service, config Config) Controller {
 		if limit <= 0 {
 			defaultLimit, err := strconv.Atoi(config.LimPageDef)
 			if err != nil {
-				return nil, response.InternalServerError(err.Error())
+				return nil, response.InternalServerError("invalid default limit configuration")
 			}
 			limit = defaultLimit
 		}
@@ -146,17 +154,17 @@ func makeGetAllEndpoint(s Service, config Config) Controller {
 
 		count, err := s.Count(ctx, filters)
 		if err != nil {
-			return nil, response.InternalServerError(err.Error())
+			return nil, response.InternalServerError("error counting users: " + err.Error())
 		}
 
 		metaData, err := meta.New(page, limit, int(count), config.LimPageDef)
 		if err != nil {
-			return nil, response.InternalServerError(err.Error())
+			return nil, response.InternalServerError("error generating metadata: " + err.Error())
 		}
 
 		users, err := s.GetAll(ctx, filters, metaData.Offset(), metaData.Limit())
 		if err != nil {
-			return nil, response.InternalServerError(err.Error())
+			return nil, response.InternalServerError("error retrieving users: " + err.Error())
 		}
 
 		return response.OK("Users retrieved successfully", users, metaData), nil
@@ -197,7 +205,13 @@ func makeUpdateEndpoint(s Service) Controller {
 		// ✅ Llamamos al servicio y obtenemos el usuario actualizado
 		user, err := s.Update(ctx, req.ID, req.FirstName, req.LastName, req.Email, req.Phone)
 		if err != nil {
-			return nil, response.InternalServerError(err.Error())
+			// 🔍 Verificamos si es un error de "no encontrado"
+			var notFoundErr *ErrNotFound
+			if errors.As(err, &notFoundErr) || errors.Is(err, ErrNotFoundBase) {
+				return nil, response.NotFound(err.Error())
+			}
+			// 💥 Para otros errores (BD, conexión, etc.)
+			return nil, response.InternalServerError("error updating user: " + err.Error())
 		}
 
 		// ✅ Retornamos el usuario actualizado en la respuesta
@@ -220,7 +234,13 @@ func makeDeleteEndpoint(s Service) Controller {
 		// 💡 Llamamos al servicio para eliminar el usuario
 		err := s.Delete(ctx, req.ID)
 		if err != nil {
-			return nil, response.InternalServerError(err.Error())
+			// 🔍 Verificamos si es un error de "no encontrado"
+			var notFoundErr *ErrNotFound
+			if errors.As(err, &notFoundErr) || errors.Is(err, ErrNotFoundBase) {
+				return nil, response.NotFound(err.Error())
+			}
+			// 💥 Para otros errores (BD, conexión, etc.)
+			return nil, response.InternalServerError("error deleting user: " + err.Error())
 		}
 
 		// ✅ Retornamos un mensaje de éxito
