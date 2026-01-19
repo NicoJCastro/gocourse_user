@@ -18,11 +18,16 @@ import (
 func NewUserHTTPServer(ctx context.Context, endpoints user.Endpoint) http.Handler {
 	mux := mux.NewRouter()
 
+	opts := []httptransport.ServerOption{
+		httptransport.ServerErrorEncoder(encodeError),
+	}
+
 	// 🎯 POST /users - Crear usuario
 	mux.Handle("/users", httptransport.NewServer(
 		endpoint.Endpoint(endpoints.Create),
 		decodeStoreUser,
 		encodeResponse,
+		opts...,
 	)).Methods("POST")
 
 	// 🎯 GET /users/{id} - Obtener un usuario por ID
@@ -30,6 +35,7 @@ func NewUserHTTPServer(ctx context.Context, endpoints user.Endpoint) http.Handle
 		endpoint.Endpoint(endpoints.Get),
 		decodeGetUser,
 		encodeResponse,
+		opts...,
 	)).Methods("GET")
 
 	// 🎯 GET /users - Obtener todos los usuarios (con paginación y filtros)
@@ -37,6 +43,7 @@ func NewUserHTTPServer(ctx context.Context, endpoints user.Endpoint) http.Handle
 		endpoint.Endpoint(endpoints.GetAll),
 		decodeGetAllUsers,
 		encodeResponse,
+		opts...,
 	)).Methods("GET")
 
 	// 🎯 PATCH /users/{id} - Actualizar usuario
@@ -44,6 +51,7 @@ func NewUserHTTPServer(ctx context.Context, endpoints user.Endpoint) http.Handle
 		endpoint.Endpoint(endpoints.Update),
 		decodeUpdateUser,
 		encodeResponse,
+		opts...,
 	)).Methods("PATCH")
 
 	// 🎯 DELETE /users/{id} - Eliminar usuario
@@ -51,6 +59,7 @@ func NewUserHTTPServer(ctx context.Context, endpoints user.Endpoint) http.Handle
 		endpoint.Endpoint(endpoints.Delete),
 		decodeDeleteUser,
 		encodeResponse,
+		opts...,
 	)).Methods("DELETE")
 	return mux
 }
@@ -137,15 +146,16 @@ func decodeDeleteUser(_ context.Context, r *http.Request) (interface{}, error) {
 
 // 🎯 Encoder para todas las respuestas
 func encodeResponse(ctx context.Context, w http.ResponseWriter, resp interface{}) error {
-	respObj, ok := resp.(response.Response)
-	if !ok {
-		errorResp := response.InternalServerError("invalid response type")
-		w.Header().Set("Content-Type", "application/json; charset=utf-8")
-		w.WriteHeader(errorResp.StatusCode())
-		return json.NewEncoder(w).Encode(errorResp)
-	}
+	respObj := resp.(response.Response)
 
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.WriteHeader(respObj.StatusCode())
 	return json.NewEncoder(w).Encode(respObj)
+}
+
+func encodeError(_ context.Context, err error, w http.ResponseWriter) {
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	resp := err.(response.Response)
+	w.WriteHeader(resp.StatusCode())
+	_ = json.NewEncoder(w).Encode(resp)
 }

@@ -2,7 +2,6 @@ package user
 
 import (
 	"context"
-	"fmt"
 	"strconv"
 
 	"github.com/NicoJCastro/go_lib_response/response"
@@ -104,7 +103,7 @@ func makeGetEndpoint(s Service) Controller {
 
 		user, err := s.Get(ctx, req.ID)
 		if err != nil {
-			return nil, response.InternalServerError(err.Error())
+			return nil, response.NotFound(err.Error())
 		}
 
 		return response.OK("User retrieved successfully", user, nil), nil
@@ -126,8 +125,8 @@ func makeGetAllEndpoint(s Service, config Config) Controller {
 			Phone:     v.Phone,
 		}
 
-		// 🎯 Extraemos limit y page directamente del struct GetAllRequest
-		// 💡 Si los valores son 0 (no proporcionados), usaremos valores por defecto
+		// Extraemos limit y page directamente del struct GetAllRequest
+		// Si los valores son 0 (no proporcionados), usaremos valores por defecto
 		limit := v.Limit
 		page := v.Page
 
@@ -135,7 +134,7 @@ func makeGetAllEndpoint(s Service, config Config) Controller {
 		if limit <= 0 {
 			defaultLimit, err := strconv.Atoi(config.LimPageDef)
 			if err != nil {
-				return nil, fmt.Errorf("invalid default limit configuration: %w", err)
+				return nil, response.InternalServerError(err.Error())
 			}
 			limit = defaultLimit
 		}
@@ -146,7 +145,6 @@ func makeGetAllEndpoint(s Service, config Config) Controller {
 		}
 
 		count, err := s.Count(ctx, filters)
-
 		if err != nil {
 			return nil, response.InternalServerError(err.Error())
 		}
